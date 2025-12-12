@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CSS 566: Book Discovery App</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="site-header">
+    <h1>CSS 566: Book Discovery App</h1>
+    <p class="author">James Mathesius</p>
+
+    <nav class="nav">
+      <a href="#problem">Problem</a>
+      <a href="#existing">Existing Apps</a>
+      <a href="#approach">Approach</a>
+      <a href="#implementation">Implementation</a>
+      <a href="#results">Results</a>
+      <a href="#future">Future Work</a>
+    </nav>
+  </header>
+
+  <main class="content">
+    <section id="problem">
+      <h2>Problem Statement</h2>
+
+      <p>
+        Finding and reading books online has become easy, but physically finding and discovering books hasn’t.
+        Libraries are an untapped resource because you can physically walk around and discover hundreds of books quickly,
+        finding ones you wouldn’t have otherwise. Furthermore, many books are older or rarer and may not have much of a presence online.
+      </p>
+
+      <p>
+        Unfortunately, the process of discovering books is harder in person. There’s less sorting, you can’t see ratings, etc.
+        What if there was an app that could tell you about any book on any shelf instantly? Show you ratings and reviews and point you
+        toward interesting books as you scan the shelves with your phone?
+      </p>
+    </section>
+
+    <section id="existing">
+      <h2>Existing Apps For Books</h2>
+      <ul>
+        <li>
+          <strong>Goodreads:</strong> you can manually type a title while standing in front of a book case, but can’t use your camera;
+          this is a slow way to look up a book.
+        </li>
+        <li>
+          <strong>Google Lens:</strong> can scan the text of the book and sometimes the image to find it, but can only do one at a time and is manual,
+          and only points you toward website links.
+        </li>
+        <li>
+          <strong>Others:</strong> other apps can scan barcodes to look up books (these apps are mainly meant for storing information about home libraries)
+          but can’t identify a book by its spine.
+        </li>
+      </ul>
+    </section>
+
+    <section id="approach">
+      <h2>Approach</h2>
+      <p>
+        A mobile app that uses computer vision to scan and identify books in realtime on bookshelves just by their spine.
+      </p>
+      <ul>
+        <li>Use an object detection model to detect bounding boxes for the book spines.</li>
+        <li>Finetune a classification model to generate unique embeddings for book spines.</li>
+        <li>Build a database of books with their embeddings.</li>
+        <li>
+          In real time on a phone, run the detection model, send book spines to the server to be embedded (or do embedding on phone),
+          and then find the matching embedding for each book spine.
+        </li>
+        <li>Display identified books and provide descriptions/ratings/other metadata to the user.</li>
+      </ul>
+    </section>
+
+    <section id="implementation">
+      <h2>Implementation</h2>
+
+      <h3>Object detection model</h3>
+      <p>
+        The first step was to create the object detection model. This was accomplished by using a YOLO 11 OBB
+        (Oriented Bounding Box) model. This model fits rectangles and rotates them to fit the books in the image.
+      </p>
+      <p>
+        To train this I used a dataset of around 10,000 images of bookshelves with the book spines marked that I found online on the site
+        “Roboflow”. This was exported to YOLO format and trained using Ultralytics Hub using free GPUs through Google Colab.
+      </p>
+
+      <h3>iOS prototype + data collection</h3>
+      <p>
+        I then exported the model to a CoreML model and developed a small iOS app that runs the model about 15 times a second and draws
+        the bounding boxes around books identified in the image. To the app I then added a button that captures an image of the bookshelf,
+        crops out the individual book spine images using the bounding boxes, and sends the photos to my computer.
+      </p>
+      <p>
+        Then, in the Memorial Library I used the app to scan one shelf at a time, making sure not to capture any book twice. This created
+        a dataset of 50,000 unique images of book spines in a realistic format (taken on iPhone, some low resolution, some blurry, etc)
+        to what we would expect the future app to have to deal with. This dataset was used to train the identification model.
+      </p>
+
+      <h3>Identification model (embeddings)</h3>
+      <p>
+        The identification model is based on Google’s recently released SigLip2 400m parameter flexible-resolution model:
+        <a href="https://huggingface.co/google/siglip2-so400m-patch16-naflex">siglip2-so400m-patch16-naflex</a>.
+        This model is high resolution and very capable. It was trained on millions of images and is intended to be used to classify images.
+        This is a great starting point because the model already contains strong features for understanding images, so it can be finetuned
+        easily for our use case.
+      </p>
+      <p>
+        To do this I took the dataset of 50,000 book spine images and augmented it 8× with additional blur, perspective, and brightness
+        augmentations. This makes it so that each book (class) has 8 images. This then allows us to train the model by showing it a number
+        of examples, and pushing the similarity of images of the same book closer together, and the similarity of different books further apart.
+      </p>
+      <p>
+        A key point is that the dataset does not have two images of any one book. This means we don't need to label the data at all, and we can
+        automatically do the 8× augmentations to create “classes” to train on. An unfortunate downside of this approach however is that some
+        variations that the model will need to handle in the real world will be missed (for example: lighting for glossy books, differences in how
+        photos look between phone cameras, etc.).
+      </p>
+
+      <h3>Training setup + evaluation</h3>
+      <p>
+        The SigLip2 model was trained for one hour on an Nvidia B200 GPU. The B200 has 192GB of VRAM which allows the batch size to be set very high,
+        around 64–128 images. This speeds up fine tuning and makes the gradient more stable since we can show multiple positive and negative examples.
+      </p>
+      <p>
+        The final model was trained for one epoch. I believe due to the large size of the model and pretraining, it was easily able to learn the
+        50,000 classes.
+      </p>
+      <p>
+        Finally, the model was tested against the baseline model to compare its performance clustering an unsorted folder of 1,000 book images,
+        as well as identifying the correct book from the detection images. I did not get numbers but the performance was vastly improved. The baseline
+        model is almost completely unusable for identifying books (it’s meant for classifying broad categories), while the finetuned model was quickly
+        able to learn the task of identifying books.
+      </p>
+    </section>
+
+    <section id="results">
+      <h2>Results</h2>
+      <p>
+        Qualitatively, finetuning SigLip2 produced a large improvement over the baseline at both clustering similar spines and matching detection crops
+        to the correct book.
+      </p>
+
+      <h3>Book detection + identification examples</h3>
+      <div class="gallery">
+        <figure>
+          <img src="assets/results_shelf_1.jpg" alt="Detected books on a shelf with predicted titles and matches" />
+          <figcaption>Detection and matching output example.</figcaption>
+        </figure>
+        <figure>
+          <img src="assets/results_shelf_2.jpg" alt="Detected books on a shelf with highlighted spines and matches" />
+          <figcaption>Detection and matching output example (another shelf).</figcaption>
+        </figure>
+      </div>
+
+      <h3>Similarity match examples</h3>
+      <div class="gallery">
+        <figure>
+          <img src="assets/match_example_1.png" alt="Similarity match example screenshot 1" />
+          <figcaption>Similarity match example.</figcaption>
+        </figure>
+        <figure>
+          <img src="assets/match_example_2.png" alt="Similarity match example screenshot 2" />
+          <figcaption>Similarity match example.</figcaption>
+        </figure>
+        <figure>
+          <img src="assets/match_example_3.png" alt="Similarity match example screenshot 3" />
+          <figcaption>Similarity match example.</figcaption>
+        </figure>
+        <figure>
+          <img src="assets/match_example_4.png" alt="Similarity match example screenshot 4" />
+          <figcaption>Similarity match example.</figcaption>
+        </figure>
+        <figure>
+          <img src="assets/match_example_5.png" alt="Similarity match example screenshot 5" />
+          <figcaption>Similarity match example.</figcaption>
+        </figure>
+        <figure>
+          <img src="assets/match_example_6.png" alt="Similarity match example screenshot 6" />
+          <figcaption>Similarity match example.</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <section id="future">
+      <h2>Future Work</h2>
+      <ul>
+        <li>
+          <strong>Finish iOS app:</strong> the app is only able to detect books currently. To identify books, images must be uploaded to a computer and
+          then have the embedding model run and compared against the database of previously scanned books.
+        </li>
+        <li>
+          <strong>Metadata pipeline:</strong> to gather information about books, a script must be manually run to OCR previously taken images, which has
+          not been optimized or made reliable. The final app should be able to connect to a cloud server, or run the embedding model locally if the
+          embedding model can be made smaller.
+        </li>
+        <li>
+          <strong>Smaller on-device models:</strong> Google offers much smaller variants of the SigLip model that could be run on a phone; I have not yet
+          explored fine tuning those.
+        </li>
+        <li>
+          <strong>Handling mistakes + domain gaps:</strong> the current model needs to be finetuned on additional classes where there are multiple real images
+          of the same book (not just augmented ones) so we can capture variations in lighting, especially for glossy spines.
+        </li>
+        <li>
+          <strong>Reduce confusions:</strong> the model still occasionally will mistakenly match a book that has the same title but a completely different cover.
+          I believe this is due to the model still remembering some of its pretraining.
+        </li>
+      </ul>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <p class="small">Hosted with GitHub Pages.</p>
+  </footer>
+</body>
+</html>
