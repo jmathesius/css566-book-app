@@ -11,6 +11,13 @@
     <h1>CSS 566: Book Discovery App</h1>
     <p class="author">James Mathesius</p>
 
+    <p>
+        Code and more results:
+        <a href="https://github.com/jmathesius/css566-book-app" target="_blank" rel="noopener noreferrer">
+        github.com/jmathesius/css566-book-app
+        </a>
+    </p>
+
     <nav class="nav">
       <a href="#problem">Problem</a>
       <a href="#existing">Existing Apps</a>
@@ -21,8 +28,10 @@
     </nav>
   </header>
 
+  
   <main class="content">
     <section id="problem">
+
       <h2>Problem Statement</h2>
 
       <p>
@@ -121,7 +130,7 @@
       <h3>Training setup + evaluation</h3>
       <p>
         The SigLip2 model was trained for one hour on an Nvidia B200 GPU. The B200 has 192GB of VRAM which allows the batch size to be set very high,
-        around 64–128 images. This speeds up fine tuning and makes the gradient more stable since we can show multiple positive and negative examples.
+        to 256, with 4 samples per class. This speeds up fine tuning and makes the gradient more stable since we can show multiple positive and negative examples.
       </p>
       <p>
         The final model was trained for one epoch. I believe due to the large size of the model and pretraining, it was easily able to learn the
@@ -138,9 +147,14 @@
     <section id="results">
       <h2>Results</h2>
       <p>
-        Qualitatively, finetuning SigLip2 produced a large improvement over the baseline at both clustering similar spines and matching detection crops
+        On an evaluation of 27,000 images across 3,000 (augmented) classes, the finetuned SigLip2 embedding model achieved Recall@1 = 0.9992–0.9998, Recall@5 ≈ 0.9997–0.99996, and mAP@5 ≈ 0.99936–0.99983. Embedding separation was strong, with average inter-class similarity ≈ 0.99–0.997 and intra-class similarity ≈ 0.009–0.015 (a 65×–108× separation ratio). These metrics evaluate robustness to synthetic augmentations and likely overestimate performance on harder real-world variations.
+      </p>
+
+      <p>
+        Qualitatively, finetuning SigLip2 did produce a large improvement over the baseline at both clustering similar spines and matching detection crops
         to the correct book.
       </p>
+
 
       <h3>Book detection + identification examples</h3>
       <div class="gallery">
@@ -210,9 +224,5 @@
       </ul>
     </section>
   </main>
-
-  <footer class="footer">
-    <p class="small">Hosted with GitHub Pages.</p>
-  </footer>
 </body>
 </html>
